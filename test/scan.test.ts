@@ -36,6 +36,7 @@ describe("dead-styles scan (real monorepo fixture)", () => {
         "useToolbarStyles",
         "useIconVariants",
         "default export of DefaultExport.styles",
+        "default export of ReAlias.styles",
       ].sort(),
     );
   });
@@ -95,5 +96,14 @@ describe("dead-styles scan (real monorepo fixture)", () => {
     expect(r.callSites.length).toBe(4);
     expect(r.usedClassNames.sort()).toEqual(["active", "completed", "error", "inactive"]);
     expect(r.deadClasses).toEqual([]);
+  });
+
+  it("follows a plain re-alias of the hook before it's called (`const useStyles = styles;`) — a real production pattern, not just the direct import binding", () => {
+    const r = result.results.find((x) => x.hook.filePath.endsWith("ReAlias.styles.ts"));
+    if (!r) throw new Error("No result for ReAlias.styles.ts");
+    expect(r.status).toBe("analyzed");
+    expect(r.callSites.length).toBe(1);
+    expect(r.usedClassNames.sort()).toEqual(["targetTitle"]);
+    expect(r.deadClasses.map((c) => c.name)).toEqual(["unusedAlias"]);
   });
 });

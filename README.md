@@ -20,6 +20,7 @@ Its limitation (inherent to how ESLint rules work — one file's AST at a time) 
 - `tss.create({...})` / `tss.create((params) => ({...}))`
 - `tss.withParams<...>().create(...)`, `tss.withName(...).create(...)`, and any other chain ending in `.create(...)`
 - Both `const classes = useStyles()` (direct binding) and `const { classes } = useStyles()` (destructured, with or without renaming)
+- A hook re-assigned to a plain local variable before it's called (`import styles from "./styles"; const useStyles = styles; ...; useStyles()`), followed transitively through any number of hops
 - Cross-file and cross-package (monorepo `paths`-alias) resolution of every call site
 
 ## What it deliberately does NOT guess

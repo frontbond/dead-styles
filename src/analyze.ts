@@ -29,40 +29,64 @@ export function analyzeHookUsage(hookRefRoots: Identifier[]): UsageAnalysis {
   // means the same call expression gets visited more than once; dedupe by
   // its position so it's only counted/analyzed a single time.
   const seenCallSites = new Set<string>();
+  // Some codebases re-alias the imported hook before calling it at all
+  // (`import styles from "./styles"; const useStyles = styles; ...;
+  // useStyles()`). A root that's only ever used to declare a plain-identifier
+  // alias has to have ITS calls followed too — so this is a worklist, not a
+  // single pass, and each alias identifier is only ever queued once.
+  const seenRoots = new Set<string>();
+  const queue: Identifier[] = [...hookRefRoots];
 
-  for (const hookNameNode of hookRefRoots) {
+  while (queue.length > 0) {
+    const hookNameNode = queue.shift()!;
+    const rootKey = `${hookNameNode.getSourceFile().getFilePath()}:${hookNameNode.getStart()}`;
+    if (seenRoots.has(rootKey)) continue;
+    seenRoots.add(rootKey);
+
     const refs = hookNameNode.findReferencesAsNodes();
 
     for (const ref of refs) {
       const parent = ref.getParent();
-      if (!parent || !Node.isCallExpression(parent)) continue;
-      if (parent.getExpression() !== ref) continue; // must be the callee, not e.g. a type reference
+      if (!parent) continue;
 
-      const callSiteKey = `${parent.getSourceFile().getFilePath()}:${parent.getStart()}`;
-      if (seenCallSites.has(callSiteKey)) continue;
-      seenCallSites.add(callSiteKey);
+      if (Node.isCallExpression(parent) && parent.getExpression() === ref) {
+        const callSiteKey = `${parent.getSourceFile().getFilePath()}:${parent.getStart()}`;
+        if (seenCallSites.has(callSiteKey)) continue;
+        seenCallSites.add(callSiteKey);
 
-      const sourceFile = parent.getSourceFile();
-      callSites.push({
-        filePath: sourceFile.getFilePath(),
-        line: parent.getStartLineNumber(),
-      });
+        const sourceFile = parent.getSourceFile();
+        callSites.push({
+          filePath: sourceFile.getFilePath(),
+          line: parent.getStartLineNumber(),
+        });
 
-      const classesIdentifier = resolveClassesIdentifier(parent);
-      if (classesIdentifier === "no-classes-destructured") {
-        continue; // legitimately uses none of the classes at this call site
-      }
-      if (!classesIdentifier) {
-        // e.g. useStyles() called inline without being bound to a variable —
-        // we can't trace what happens to the result.
-        sawWholeObjectForwarding = true;
+        const classesIdentifier = resolveClassesIdentifier(parent);
+        if (classesIdentifier === "no-classes-destructured") {
+          continue; // legitimately uses none of the classes at this call site
+        }
+        if (!classesIdentifier) {
+          // e.g. useStyles() called inline without being bound to a variable —
+          // we can't trace what happens to the result.
+          sawWholeObjectForwarding = true;
+          continue;
+        }
+
+        const usage = traceClassesIdentifier(classesIdentifier);
+        if (usage.dynamic) sawDynamicAccess = true;
+        if (usage.forwardedWhole) sawWholeObjectForwarding = true;
+        for (const name of usage.used) usedClassNames.add(name);
         continue;
       }
 
-      const usage = traceClassesIdentifier(classesIdentifier);
-      if (usage.dynamic) sawDynamicAccess = true;
-      if (usage.forwardedWhole) sawWholeObjectForwarding = true;
-      for (const name of usage.used) usedClassNames.add(name);
+      // A plain re-alias: `const useStyles = styles;` (NOT destructured,
+      // NOT called yet) — follow the new local name too.
+      if (
+        Node.isVariableDeclaration(parent) &&
+        parent.getInitializer() === ref &&
+        Node.isIdentifier(parent.getNameNode())
+      ) {
+        queue.push(parent.getNameNode() as Identifier);
+      }
     }
   }
 
