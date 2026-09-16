@@ -34,6 +34,19 @@ export function toText(result: ScanResult, cwd = process.cwd()): string {
     }
   }
 
+  if (result.sassResults) {
+    const deadSass = result.sassResults.filter((c) => !c.used);
+    lines.push("");
+    if (deadSass.length === 0) {
+      lines.push("No unused global Sass classes found.");
+    } else {
+      lines.push(`Unused global Sass classes: ${deadSass.length}`);
+      for (const c of deadSass) {
+        lines.push(`  - ${relOrAbs(c.filePath, cwd)}:${c.line} .${c.className}`);
+      }
+    }
+  }
+
   return lines.join("\n");
 }
 
@@ -80,6 +93,20 @@ export function toMarkdown(result: ScanResult, cwd = process.cwd()): string {
     }
     lines.push("");
     lines.push("</details>");
+  }
+
+  if (result.sassResults) {
+    const deadSass = result.sassResults.filter((c) => !c.used);
+    lines.push("");
+    if (deadSass.length === 0) {
+      lines.push("✅ No unused global Sass classes found.");
+    } else {
+      lines.push(`Found **${deadSass.length}** unused global Sass class${deadSass.length === 1 ? "" : "es"}:`);
+      lines.push("");
+      for (const c of deadSass) {
+        lines.push(`- \`.${c.className}\` — ${relOrAbs(c.filePath, cwd)}:${c.line}`);
+      }
+    }
   }
 
   return lines.join("\n");

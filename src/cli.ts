@@ -10,14 +10,19 @@ const program = new Command();
 program
   .name("dead-styles")
   .description(
-    "Find CSS-in-JS classes (tss-react / MUI makeStyles / JSS) that are defined but never used anywhere in the project — including when the styles hook and its call sites live in different files.",
+    "Find CSS-in-JS classes (tss-react / MUI makeStyles / JSS) that are defined but never used anywhere in the project, and (with --sass) global Sass classes that are never applied anywhere.",
   )
-  .version("0.1.4");
+  .version("0.1.5");
 
 program
   .command("scan")
   .description("Scan a project for dead CSS-in-JS classes")
   .requiredOption("--tsconfig <path>", "Path to tsconfig.json")
+  .option(
+    "--sass <path>",
+    "Path to a global Sass (indented syntax) file to also scan for unused classes (repeatable)",
+    (value: string, previous: string[] | undefined) => [...(previous ?? []), value],
+  )
   .option("--format <format>", "Output format: text, markdown, json", "text")
   .option("--out <path>", "Write output to a file instead of stdout")
   .option(
@@ -27,7 +32,7 @@ program
   )
   .action((opts) => {
     const project = new Project({ tsConfigFilePath: opts.tsconfig });
-    const result = scan(project);
+    const result = scan(project, { sassFiles: opts.sass });
 
     let output: string;
     switch (opts.format) {
@@ -52,7 +57,9 @@ program
       console.log(output);
     }
 
-    const hasDead = result.results.some((r) => r.deadClasses.length > 0);
+    const hasDead =
+      result.results.some((r) => r.deadClasses.length > 0) ||
+      (result.sassResults?.some((r) => !r.used) ?? false);
     if (opts.failOn === "dead-styles" && hasDead) {
       process.exitCode = 1;
     }

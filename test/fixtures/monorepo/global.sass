@@ -1,0 +1,27 @@
+$blue90: rgba(32, 143, 245, 0.9)
+
+.usedDirect
+  color: $blue90
+
+.usedViaClsx
+  color: red
+
+.usedInObjectKey
+  color: green
+
+.deadClass
+  color: gray
+
+.deadClass2, .deadClass3
+  color: black
+
+.textStylesTableRowServer
+  font-size: 14px
+
+  &.stopped
+    color: $blue90
+
+// a comment line, ignored
+.root-blazing
+  .usedDirect, .usedViaClsx
+    color: pink

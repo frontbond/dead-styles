@@ -1,9 +1,15 @@
 import { Project } from "ts-morph";
 import { analyzeHookUsage } from "./analyze.js";
 import { findDefaultImportIdentifiers, findStyleHookCandidates } from "./discover.js";
+import { findSassClassDefinitions, scanSassUsage } from "./sass.js";
 import type { HookResult, ScanResult } from "./types.js";
 
-export function scan(project: Project): ScanResult {
+export interface ScanOptions {
+  /** Paths to global Sass (indented syntax) files to also scan for unused classes. */
+  sassFiles?: string[];
+}
+
+export function scan(project: Project, options: ScanOptions = {}): ScanResult {
   const candidates = findStyleHookCandidates(project);
   const results: HookResult[] = [];
 
@@ -42,5 +48,11 @@ export function scan(project: Project): ScanResult {
     });
   }
 
-  return { results };
+  const sassResults = options.sassFiles?.length
+    ? options.sassFiles.flatMap((sassFile) =>
+        scanSassUsage(findSassClassDefinitions(sassFile), project.getSourceFiles()),
+      )
+    : undefined;
+
+  return sassResults ? { results, sassResults } : { results };
 }

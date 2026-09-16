@@ -37,6 +37,18 @@ export interface HookResult {
   deadClasses: DefinedClass[];
 }
 
+export interface SassClassDefinition {
+  className: string;
+  filePath: string;
+  line: number;
+}
+
+export interface SassClassResult extends SassClassDefinition {
+  used: boolean;
+}
+
 export interface ScanResult {
   results: HookResult[];
+  /** Present only when one or more --sass files were scanned. */
+  sassResults?: SassClassResult[];
 }

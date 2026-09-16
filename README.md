@@ -33,6 +33,22 @@ To keep the false-positive rate near zero, `dead-styles` skips (rather than repo
 
 Skipped hooks are reported separately so you know what wasn't checked, but never show up as "dead."
 
+## Global Sass classes (`--sass`)
+
+Some projects also keep a global stylesheet of plain classes (text styles, color utilities, etc.) written in Sass's indented syntax, applied via literal strings (`className="textStylesActive"`, `clsx(...)`, `classnames(...)`). Pass one or more `--sass <path>` flags to also check those:
+
+```bash
+npx dead-styles scan --tsconfig ./tsconfig.json --sass ./src/styles/global.sass
+```
+
+This works completely differently from the CSS-in-JS strategy above — there's no hook, no call site, no `classes` object to trace. Instead:
+
+1. Every **top-level** (unindented) class selector in the file is a candidate — `.foo` or `.foo, .bar` on one line. Anything indented (a pseudo-class like `&:hover`, a modifier block like `.root-blazing .foo { ... }`, a `@media` block) is a nested reference, not a definition, and is ignored.
+2. Every JS/TS/JSX/TSX file in the project is scanned for that exact class name appearing anywhere as a literal token — as a bare string, inside `clsx()`/`classnames()`/`cx()` (string arguments or object keys), or inside a template literal.
+3. Anything never found this way is reported as an unused global Sass class.
+
+**Known blind spot**: a class name assembled dynamically at runtime (`'textStyles' + variant`) won't be seen as a literal token and will be reported as unused even if it's actually applied. This is a one-directional risk — it can under-report (miss a real usage) but never over-report a class that's genuinely referenced by a static string, so it's a safe default, just not exhaustive. Only simple class selectors are recognized as definitions; compound selectors (`.a.b`), tag/id selectors, and classes defined inside an `@media`/`@supports` block aren't picked up.
+
 ## Not (yet) supported
 
 - Plain CSS Modules (`*.module.css`) — see [`check-unused-css`](https://github.com/malinindev/check-unused-css) for that.
@@ -59,6 +75,7 @@ npx dead-styles scan --tsconfig ./tsconfig.json
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--tsconfig <path>` | Path to `tsconfig.json` (required) | — |
+| `--sass <path>` | Path to a global Sass file to also scan for unused classes (repeatable) | — |
 | `--format <format>` | `text`, `markdown`, or `json` | `text` |
 | `--out <path>` | Write output to a file instead of stdout | — |
 | `--fail-on <mode>` | `dead-styles` (exit 1 if any found) or `never` | `dead-styles` |
