@@ -57,6 +57,18 @@ describe("findStyleHookCandidates", () => {
     expect(found[0].candidate.definedClasses.map((c) => c.name)).toEqual(["root", "icon"]);
   });
 
+  it("excludes JSS/tss-react at-rule keys (@keyframes, @media, @supports, ...) — they aren't classes and are never accessed via classes.foo", () => {
+    const found = candidatesFor(`
+      const useStyles = makeStyles({
+        root: {},
+        "@keyframes sk-bounce": { "0%": { transform: "scale(0)" } },
+        "@media (max-width: 600px)": { root: { display: "none" } },
+      });
+    `);
+    expect(found).toHaveLength(1);
+    expect(found[0].candidate.definedClasses.map((c) => c.name)).toEqual(["root"]);
+  });
+
   it("ignores unrelated function calls", () => {
     const found = candidatesFor(`
       const notAHook = someOtherFactory({ a: {} });

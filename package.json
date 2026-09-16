@@ -1,6 +1,6 @@
 {
   "name": "dead-styles",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Find unused CSS-in-JS classes (tss-react / MUI makeStyles / JSS) across your whole project, not just one file",
   "type": "module",
   "bin": {

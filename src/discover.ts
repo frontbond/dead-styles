@@ -240,7 +240,12 @@ function extractTopLevelKeys(obj: ObjectLiteralExpression): {
         name = nameNode.getText();
       }
 
-      if (name) {
+      // Top-level JSS/tss-react at-rules (`@keyframes foo`, `@media (...)`,
+      // `@supports (...)`, `@font-face`, `@global`, ...) aren't classes at
+      // all — they take effect just by being present in the styles object
+      // and are never accessed as `classes.foo`. Flagging them as "dead"
+      // would be a guaranteed false positive every time.
+      if (name && !name.startsWith("@")) {
         definedClasses.push({
           name,
           line: nameNode.getStartLineNumber(),
