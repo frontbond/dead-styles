@@ -1,0 +1,98 @@
+# dead-styles
+
+Find CSS-in-JS classes (tss-react / MUI `makeStyles` / JSS) that are defined but never used **anywhere in the project** — including when the styles hook is defined in one file and called from several others (a very common convention: `Component.styles.ts` + `Component.tsx`, or a shared hook consumed by many components across a monorepo).
+
+> Unofficial, third-party tool. Not affiliated with or endorsed by tss-react, MUI, or Knip.
+
+## Why not just use an ESLint rule?
+
+There's already a good ESLint rule for this: [`eslint-plugin-tss-unused-classes`](https://github.com/garronej/eslint-plugin-tss-unused-classes), officially recommended by the [tss-react docs](https://docs.tss-react.dev/detecting-unused-classes). Use it if it fits your setup.
+
+Its limitation (inherent to how ESLint rules work — one file's AST at a time) is that it can only see a class as "used" if `classes.foo` appears **in the same file** as the `makeStyles`/`tss.create()` call. The moment styles are defined in their own file and the hook is called from a different file (or from several different files/packages), every class in that styles file gets reported as unused — a 100% false-positive rate for that very common layout.
+
+`dead-styles` uses the TypeScript compiler API (via [ts-morph](https://github.com/dsherret/ts-morph)) to resolve the hook's declaration, find **every** call site across the whole project (any file, any package in a monorepo), and union up class usage across all of them before deciding anything is dead.
+
+## What it supports
+
+- `makeStyles((theme) => ({...}))` — classic MUI v4 / `@mui/styles` single-call form
+- `makeStyles(options)((theme, params) => ({...}))` — tss-react's curried `createMakeStyles()` form
+- `tss.create({...})` / `tss.create((params) => ({...}))`
+- `tss.withParams<...>().create(...)`, `tss.withName(...).create(...)`, and any other chain ending in `.create(...)`
+- Both `const classes = useStyles()` (direct binding) and `const { classes } = useStyles()` (destructured, with or without renaming)
+- Cross-file and cross-package (monorepo `paths`-alias) resolution of every call site
+
+## What it deliberately does NOT guess
+
+To keep the false-positive rate near zero, `dead-styles` skips (rather than reports on) a hook whenever it can't fully verify usage:
+
+- The styles object has a computed property key (`{ [dynamic]: {...} }`) — the class's real name isn't known statically.
+- A class is accessed via a computed/dynamic key (`classes[someVariable]`) instead of `classes.foo` — could be any class.
+- The whole `classes` object is forwarded somewhere we can't follow (spread with `{...classes}`, passed as a prop to a child component, assigned to another variable, returned from a function, etc.).
+
+Skipped hooks are reported separately so you know what wasn't checked, but never show up as "dead."
+
+## Not (yet) supported
+
+- Plain CSS Modules (`*.module.css`) — see [`check-unused-css`](https://github.com/malinindev/check-unused-css) for that.
+- `styled-components` / `emotion`'s `styled` tagged templates.
+- React Native `StyleSheet.create` / `eslint-plugin-react-native`'s `no-unused-styles` territory.
+- Tailwind utility classes — Tailwind's own JIT compiler already purges genuinely unused utility classes at build time, so static "unused class" detection isn't meaningful there. Custom `@layer components` classes are a different, still-unhandled case.
+
+These may become separate strategies/tools later; PRs welcome.
+
+## Install
+
+```bash
+npm install --save-dev dead-styles
+```
+
+## Usage
+
+```bash
+npx dead-styles scan --tsconfig ./tsconfig.json
+```
+
+### Options
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--tsconfig <path>` | Path to `tsconfig.json` (required) | — |
+| `--format <format>` | `text`, `markdown`, or `json` | `text` |
+| `--out <path>` | Write output to a file instead of stdout | — |
+| `--fail-on <mode>` | `dead-styles` (exit 1 if any found) or `never` | `dead-styles` |
+
+### Example
+
+```bash
+npx dead-styles scan --tsconfig ./tsconfig.json --format markdown
+```
+
+```md
+# dead-styles report
+
+Analyzed 6 style hooks (2 fully verified, 3 skipped).
+
+Found dead classes in 3 style hooks:
+
+### `useCardStyles` — src/Card.styles.ts:3
+
+Called from 2 sites.
+
+- `unusedLabel` (line 7)
+...
+```
+
+## How it decides a class is "used"
+
+For each style hook (`useStyles`, or whatever you named it):
+
+1. Collect the top-level keys of the object passed to `makeStyles(...)` / `tss.create(...)` — these are the candidate class names.
+2. Find every place the hook is *called* anywhere in the project via TypeScript's own symbol resolution (works across `paths` aliases in a monorepo).
+3. At each call site, figure out what the returned `classes` got bound to (`const classes = ...` or `const { classes } = ...`).
+4. Trace every reference to that local `classes` binding **within its own file** (a local variable can't be referenced outside its lexical scope — cross-file usage happens through additional call sites, not through this identifier).
+5. A class is "used" if it shows up as `classes.foo` or `classes['foo']` at **any** call site, anywhere in the project.
+6. Anything left over is reported as dead — unless step 3 or 4 hit something unverifiable (see above), in which case the whole hook is skipped instead.
+
+## License
+
+MIT
