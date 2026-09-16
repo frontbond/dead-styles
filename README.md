@@ -16,6 +16,7 @@ Its limitation (inherent to how ESLint rules work — one file's AST at a time) 
 
 - `makeStyles((theme) => ({...}))` — classic MUI v4 / `@mui/styles` single-call form
 - `makeStyles(options)((theme, params) => ({...}))` — tss-react's curried `createMakeStyles()` form
+- `makeStyles()({...})` exported as a bare `export default` (the `tss-react/mui` convention), with **no local variable at all** — each importing file picks its own local name, and every one of them is resolved back to the same definition
 - `tss.create({...})` / `tss.create((params) => ({...}))`
 - `tss.withParams<...>().create(...)`, `tss.withName(...).create(...)`, and any other chain ending in `.create(...)`
 - Both `const classes = useStyles()` (direct binding) and `const { classes } = useStyles()` (destructured, with or without renaming)

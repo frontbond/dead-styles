@@ -1,94 +1,176 @@
 import {
   CallExpression,
   Identifier,
+  ImportDeclaration,
   Node,
   ObjectLiteralExpression,
   Project,
+  SourceFile,
   SyntaxKind,
-  VariableDeclaration,
 } from "ts-morph";
 import type { DefinedClass, StyleHookCandidate } from "./types.js";
 
 /**
- * Recognizes the two common CSS-in-JS "define a styles hook" conventions:
+ * Recognizes the common CSS-in-JS "define a styles hook" conventions:
  *
  *   const useStyles = makeStyles((theme) => ({ root: {...} }));
  *   const useStyles = tss.create({ root: {...} });
  *   const useStyles = tss.withParams<Props>().create((params) => ({ root: {...} }));
+ *   export default makeStyles()({ root: {...} });   // no local name at all
  *
- * In every case the variable is bound directly to the factory call's result,
- * and that result IS the hook (calling it later returns the classes).
+ * In every case the factory call's result IS the hook (calling it later
+ * returns the classes). The last form — a bare `export default` with no
+ * intermediate variable — is common with tss-react's `tss-react/mui`
+ * makeStyles() and needs special handling: there's no local identifier to
+ * search for, so call sites have to be found via every file that default-
+ * imports this module (see `findDefaultImportIdentifiers`).
  */
 export function findStyleHookCandidates(project: Project): {
-  hookNameNode: Identifier;
+  hookNameNode?: Identifier;
+  isDefaultExport: boolean;
   candidate: StyleHookCandidate;
 }[] {
-  const found: { hookNameNode: Identifier; candidate: StyleHookCandidate }[] = [];
+  const found: {
+    hookNameNode?: Identifier;
+    isDefaultExport: boolean;
+    candidate: StyleHookCandidate;
+  }[] = [];
 
   for (const sourceFile of project.getSourceFiles()) {
     if (sourceFile.isDeclarationFile()) continue;
 
     sourceFile.forEachDescendant((node) => {
-      if (!Node.isVariableDeclaration(node)) return;
+      // Case 1: const useStyles = makeStyles(...) / tss.create(...)
+      if (Node.isVariableDeclaration(node)) {
+        const initializer = node.getInitializer();
+        if (!initializer || !Node.isCallExpression(initializer)) return;
+        const match = matchFactoryCallExpression(initializer);
+        if (!match) return;
 
-      const match = matchFactoryCall(node);
-      if (!match) return;
+        const nameNode = node.getNameNode();
+        if (!Node.isIdentifier(nameNode)) return; // hook name must be a simple identifier
 
-      const nameNode = node.getNameNode();
-      if (!Node.isIdentifier(nameNode)) return; // hook name must be a simple identifier
-
-      const stylesObject = resolveStylesObject(match.call);
-      if (!stylesObject) return;
-
-      const { definedClasses, hasComputedDefinitionKeys } =
-        extractTopLevelKeys(stylesObject);
-
-      if (definedClasses.length === 0 && !hasComputedDefinitionKeys) return;
-
-      found.push({
-        hookNameNode: nameNode,
-        candidate: {
-          hookName: nameNode.getText(),
-          filePath: sourceFile.getFilePath(),
+        pushCandidate({
+          hookNameNode: nameNode,
+          isDefaultExport: false,
+          displayName: nameNode.getText(),
           line: nameNode.getStartLineNumber(),
-          factory: match.factory,
-          definedClasses,
-          hasComputedDefinitionKeys,
-        },
-      });
+          sourceFile,
+          match,
+        });
+        return;
+      }
+
+      // Case 2: export default makeStyles()({...})  /  export default tss.create(...)
+      if (Node.isExportAssignment(node) && !node.isExportEquals()) {
+        const expr = unwrapParens(node.getExpression());
+        if (!Node.isCallExpression(expr)) return;
+        const match = matchFactoryCallExpression(expr);
+        if (!match) return;
+
+        pushCandidate({
+          hookNameNode: undefined,
+          isDefaultExport: true,
+          displayName: `default export of ${sourceFile.getBaseNameWithoutExtension()}`,
+          line: node.getStartLineNumber(),
+          sourceFile,
+          match,
+        });
+      }
+    });
+  }
+
+  function pushCandidate(args: {
+    hookNameNode: Identifier | undefined;
+    isDefaultExport: boolean;
+    displayName: string;
+    line: number;
+    sourceFile: SourceFile;
+    match: { call: CallExpression; factory: "makeStyles" | "tss.create" };
+  }) {
+    const stylesObject = resolveStylesObject(args.match.call);
+    if (!stylesObject) return;
+
+    const { definedClasses, hasComputedDefinitionKeys } =
+      extractTopLevelKeys(stylesObject);
+
+    if (definedClasses.length === 0 && !hasComputedDefinitionKeys) return;
+
+    found.push({
+      hookNameNode: args.hookNameNode,
+      isDefaultExport: args.isDefaultExport,
+      candidate: {
+        hookName: args.displayName,
+        filePath: args.sourceFile.getFilePath(),
+        line: args.line,
+        factory: args.match.factory,
+        definedClasses,
+        hasComputedDefinitionKeys,
+      },
     });
   }
 
   return found;
 }
 
-function matchFactoryCall(
-  decl: VariableDeclaration,
-): { call: CallExpression; factory: "makeStyles" | "tss.create" } | undefined {
-  const initializer = decl.getInitializer();
-  if (!initializer || !Node.isCallExpression(initializer)) return undefined;
+/**
+ * Given every file in the project, finds the local identifier each one
+ * binds to when it default-imports `definingFile`. A default export has no
+ * single shared symbol the way a named export does — every importing file
+ * picks its own local name — so each has to be searched individually.
+ */
+export function findDefaultImportIdentifiers(
+  project: Project,
+  definingFile: SourceFile,
+): Identifier[] {
+  const result: Identifier[] = [];
 
-  const callee = initializer.getExpression();
+  for (const sourceFile of project.getSourceFiles()) {
+    if (sourceFile.isDeclarationFile()) continue;
+    if (sourceFile === definingFile) continue;
 
-  // const useStyles = makeStyles((theme) => ({...}))  — classic MUI v4 / @mui/styles
-  if (Node.isIdentifier(callee) && callee.getText() === "makeStyles") {
-    return { call: initializer, factory: "makeStyles" };
+    for (const importDecl of sourceFile.getImportDeclarations()) {
+      if (!isImportOf(importDecl, definingFile)) continue;
+      const defaultImport = importDecl.getDefaultImport();
+      if (defaultImport) result.push(defaultImport);
+    }
   }
 
-  // const useStyles = makeStyles(options)((theme, params) => ({...}))
-  // — tss-react's curried createMakeStyles() flavor. The styles argument is
-  // on the OUTER call (`initializer`); the inner call is just `makeStyles(options)`.
+  return result;
+}
+
+function isImportOf(importDecl: ImportDeclaration, definingFile: SourceFile): boolean {
+  try {
+    return importDecl.getModuleSpecifierSourceFile() === definingFile;
+  } catch {
+    return false;
+  }
+}
+
+function matchFactoryCallExpression(
+  call: CallExpression,
+): { call: CallExpression; factory: "makeStyles" | "tss.create" } | undefined {
+  const callee = call.getExpression();
+
+  // makeStyles((theme) => ({...}))  — classic MUI v4 / @mui/styles
+  if (Node.isIdentifier(callee) && callee.getText() === "makeStyles") {
+    return { call, factory: "makeStyles" };
+  }
+
+  // makeStyles(options)((theme, params) => ({...}))  /  makeStyles()({...})
+  // — tss-react's curried createMakeStyles()/tss-react/mui flavor. The
+  // styles argument is on the OUTER call; the inner call is `makeStyles(options)`.
   if (
     Node.isCallExpression(callee) &&
     Node.isIdentifier(callee.getExpression()) &&
     callee.getExpression().getText() === "makeStyles"
   ) {
-    return { call: initializer, factory: "makeStyles" };
+    return { call, factory: "makeStyles" };
   }
 
-  // const useStyles = tss.create(...)  /  tss.withParams<...>().create(...)
+  // tss.create(...)  /  tss.withParams<...>().create(...)
   if (Node.isPropertyAccessExpression(callee) && callee.getName() === "create") {
-    return { call: initializer, factory: "tss.create" };
+    return { call, factory: "tss.create" };
   }
 
   return undefined;

@@ -12,7 +12,7 @@ program
   .description(
     "Find CSS-in-JS classes (tss-react / MUI makeStyles / JSS) that are defined but never used anywhere in the project — including when the styles hook and its call sites live in different files.",
   )
-  .version("0.1.0");
+  .version("0.1.1");
 
 program
   .command("scan")

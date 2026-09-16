@@ -34,6 +34,7 @@ describe("dead-styles scan (real monorepo fixture)", () => {
         "useLegacyStyles",
         "useSpreadyStyles",
         "useToolbarStyles",
+        "default export of DefaultExport.styles",
       ].sort(),
     );
   });
@@ -74,5 +75,16 @@ describe("dead-styles scan (real monorepo fixture)", () => {
     const r = byHookName(result.results, "useComputedDefStyles");
     expect(r.status).toBe("skipped-dynamic");
     expect(r.deadClasses).toEqual([]);
+  });
+
+  it("resolves a bare `export default makeStyles()({...})` (no local name) via every importing file's own default-import binding, aggregating across packages", () => {
+    const r = result.results.find(
+      (x) => x.hook.filePath.endsWith("DefaultExport.styles.ts"),
+    );
+    if (!r) throw new Error("No result for DefaultExport.styles.ts");
+    expect(r.status).toBe("analyzed");
+    expect(r.callSites.length).toBe(2);
+    expect(r.usedClassNames.sort()).toEqual(["title", "wrapper"]);
+    expect(r.deadClasses.map((c) => c.name)).toEqual(["hint"]);
   });
 });
