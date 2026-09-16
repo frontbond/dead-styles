@@ -34,6 +34,7 @@ describe("dead-styles scan (real monorepo fixture)", () => {
         "useLegacyStyles",
         "useSpreadyStyles",
         "useToolbarStyles",
+        "useIconVariants",
         "default export of DefaultExport.styles",
       ].sort(),
     );
@@ -86,5 +87,13 @@ describe("dead-styles scan (real monorepo fixture)", () => {
     expect(r.callSites.length).toBe(2);
     expect(r.usedClassNames.sort()).toEqual(["title", "wrapper"]);
     expect(r.deadClasses.map((c) => c.name)).toEqual(["hint"]);
+  });
+
+  it("does not let four sibling components in the SAME file, each destructuring their own `classes`, leak into each other (real production bug)", () => {
+    const r = byHookName(result.results, "useIconVariants");
+    expect(r.status).toBe("analyzed");
+    expect(r.callSites.length).toBe(4);
+    expect(r.usedClassNames.sort()).toEqual(["active", "completed", "error", "inactive"]);
+    expect(r.deadClasses).toEqual([]);
   });
 });

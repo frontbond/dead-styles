@@ -124,16 +124,32 @@ function traceClassesIdentifier(classesIdentifier: Identifier): {
   let dynamic = false;
   let forwardedWhole = false;
 
-  // A local variable can only be referenced from within its own file's
-  // lexical scope. For shorthand-destructured bindings, ts-morph's
-  // reference search sometimes widens to the *property declaration* on the
-  // source type (e.g. a shared `{ [K in keyof T]: string }` mapped type
-  // used by every call site), which would otherwise leak unrelated
-  // call sites' usages into this one. Restrict defensively to the same file.
-  const ownFile = classesIdentifier.getSourceFile();
+  // A local variable can only be referenced from within its own lexical
+  // scope. For shorthand-destructured bindings, ts-morph's reference search
+  // sometimes widens to the *property declaration* on the source type (e.g.
+  // a shared `{ [K in keyof T]: string }` mapped type used by every call
+  // site), which would otherwise leak OTHER call sites' usages into this
+  // one — including ones in the very same file (e.g. four sibling
+  // components in one file, each with their own `const { classes } =
+  // useStyles()`). Restrict defensively to the innermost function scope
+  // that actually contains this declaration, by text range, rather than
+  // trusting the language service's symbol resolution here.
+  const scope = getEnclosingScope(classesIdentifier);
+  const scopeFile = scope.getSourceFile();
+  const scopeStart = scope.getStart();
+  const scopeEnd = scope.getEnd();
+  // Position offsets are per-file, so a range check alone is meaningless
+  // across files — a ref in some OTHER file can easily have a start/end
+  // that numerically falls inside this file's scope range. Same-file
+  // identity must be checked first.
   const refs = classesIdentifier
     .findReferencesAsNodes()
-    .filter((ref) => ref.getSourceFile() === ownFile);
+    .filter(
+      (ref) =>
+        ref.getSourceFile() === scopeFile &&
+        ref.getStart() >= scopeStart &&
+        ref.getEnd() <= scopeEnd,
+    );
 
   for (const ref of refs) {
     if (ref === classesIdentifier) continue; // skip the declaration itself
@@ -165,4 +181,26 @@ function traceClassesIdentifier(classesIdentifier: Identifier): {
   }
 
   return { used, dynamic, forwardedWhole };
+}
+
+/**
+ * The nearest enclosing function-like node (component body, hook body,
+ * plain function, etc.), or the whole file for a module-scope declaration.
+ * Used as a text-range bounding box so a local variable's usages can't leak
+ * into a sibling scope that happens to declare a same-named binding.
+ */
+function getEnclosingScope(node: Node): Node {
+  let current: Node | undefined = node.getParent();
+  while (current) {
+    if (
+      Node.isFunctionDeclaration(current) ||
+      Node.isFunctionExpression(current) ||
+      Node.isArrowFunction(current) ||
+      Node.isMethodDeclaration(current)
+    ) {
+      return current;
+    }
+    current = current.getParent();
+  }
+  return node.getSourceFile();
 }
