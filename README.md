@@ -33,21 +33,30 @@ To keep the false-positive rate near zero, `dead-styles` skips (rather than repo
 
 Skipped hooks are reported separately so you know what wasn't checked, but never show up as "dead."
 
-## Global Sass classes (`--sass`)
+## Global stylesheet classes (`--sass` / `--scss` / `--css`)
 
-Some projects also keep a global stylesheet of plain classes (text styles, color utilities, etc.) written in Sass's indented syntax, applied via literal strings (`className="textStylesActive"`, `clsx(...)`, `classnames(...)`). Pass one or more `--sass <path>` flags to also check those:
+Some projects also keep a global stylesheet of plain classes (text styles, color utilities, etc.), applied via literal strings (`className="textStylesActive"`, `clsx(...)`, `classnames(...)`) rather than through a CSS-in-JS hook. Pass one or more `--sass <path>` (indented syntax), `--scss <path>` (brace syntax), and/or `--css <path>` flags — any combination, repeatable — to also check those:
 
 ```bash
-npx dead-styles scan --tsconfig ./tsconfig.json --sass ./src/styles/global.sass
+npx dead-styles scan --tsconfig ./tsconfig.json \
+  --sass ./src/styles/global.sass \
+  --scss ./src/styles/global.scss \
+  --css ./src/styles/global.css
 ```
 
 This works completely differently from the CSS-in-JS strategy above — there's no hook, no call site, no `classes` object to trace. Instead:
 
-1. Every **top-level** (unindented) class selector in the file is a candidate — `.foo` or `.foo, .bar` on one line. Anything indented (a pseudo-class like `&:hover`, a modifier block like `.root-blazing .foo { ... }`, a `@media` block) is a nested reference, not a definition, and is ignored.
+1. Every **top-level** class selector in the file is a candidate — `.foo` or `.foo, .bar` (including split across lines). "Top-level" means different things depending on the syntax:
+   - `--sass` (indented syntax): an unindented line. A pseudo-class like `&:hover`, a modifier block like `.root-blazing .foo`, or anything under a `@media` block is indented, so it's a nested reference, not a definition, and is ignored.
+   - `--scss` / `--css` (brace syntax): a selector block that isn't nested inside any `{ }` at all. SCSS nesting (`&:hover { ... }`, `.foo .bar { ... }`), and anything inside an `@media`/`@supports`/`@keyframes`/`@font-face` block, is one level deeper and is ignored the same way.
 2. Every JS/TS/JSX/TSX file in the project is scanned for that exact class name appearing anywhere as a literal token — as a bare string, inside `clsx()`/`classnames()`/`cx()` (string arguments or object keys), or inside a template literal.
-3. Anything never found this way is reported as an unused global Sass class.
+3. Anything never found this way is reported as an unused global stylesheet class.
 
-**Known blind spot**: a class name assembled dynamically at runtime (`'textStyles' + variant`) won't be seen as a literal token and will be reported as unused even if it's actually applied. This is a one-directional risk — it can under-report (miss a real usage) but never over-report a class that's genuinely referenced by a static string, so it's a safe default, just not exhaustive. Only simple class selectors are recognized as definitions; compound selectors (`.a.b`), tag/id selectors, and classes defined inside an `@media`/`@supports` block aren't picked up.
+**Known blind spots**:
+
+- A class name assembled dynamically at runtime (`'textStyles' + variant`) won't be seen as a literal token and will be reported as unused even if it's actually applied. This is a one-directional risk — it can under-report (miss a real usage) but never over-report a class that's genuinely referenced by a static string, so it's a safe default, just not exhaustive.
+- Only simple class selectors are recognized as definitions; compound selectors (`.a.b`), descendant/tag/id selectors, and anything nested (see above) aren't picked up as definitions — they're silently skipped, never guessed at.
+- For `--scss`, a `//` line comment right before a `url(...)` is deliberately *not* treated as the start of a comment when it's preceded by a `:` (covers `url(http://...)`/`url(https://...)`), but an unquoted, protocol-relative `url(//cdn.example.com/...)` has no `:` to guard it and could still be mis-treated as a comment start. Quoting the URL (`url("//cdn.example.com/...")`) avoids this entirely and is good practice regardless.
 
 ## Not (yet) supported
 
@@ -75,7 +84,9 @@ npx dead-styles scan --tsconfig ./tsconfig.json
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--tsconfig <path>` | Path to `tsconfig.json` (required) | — |
-| `--sass <path>` | Path to a global Sass file to also scan for unused classes (repeatable) | — |
+| `--sass <path>` | Path to a global Sass (indented syntax) file to also scan for unused classes (repeatable) | — |
+| `--scss <path>` | Path to a global SCSS (brace syntax) file to also scan for unused classes (repeatable) | — |
+| `--css <path>` | Path to a global plain CSS file to also scan for unused classes (repeatable) | — |
 | `--format <format>` | `text`, `markdown`, or `json` | `text` |
 | `--out <path>` | Write output to a file instead of stdout | — |
 | `--fail-on <mode>` | `dead-styles` (exit 1 if any found) or `never` | `dead-styles` |

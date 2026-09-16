@@ -1,0 +1,42 @@
+$primary: #1976d2; // color variable, not a class
+
+// A simple used class
+.scssUsedDirect {
+  color: $primary;
+}
+
+.scssUsedViaClsx,
+.scssUsedInObjectKey {
+  font-weight: bold;
+}
+
+.scssDeadClass {
+  color: red;
+}
+
+.scssDeadClass2,
+.scssDeadClass3 {
+  color: blue;
+}
+
+.scssWrapper {
+  &:hover {
+    .scssNestedIgnored {
+      color: green;
+    }
+  }
+}
+
+@media (max-width: 600px) {
+  .scssMediaIgnored {
+    display: none;
+  }
+}
+
+// url() with an unquoted http:// must not be mistaken for a `//` comment,
+// even when the whole rule is on one line.
+.scssOneLinerBgImage { background: url(http://example.com/img.png); }
+
+.scssAfterUrl {
+  color: purple;
+}

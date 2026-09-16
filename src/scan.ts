@@ -1,12 +1,18 @@
 import { Project } from "ts-morph";
 import { analyzeHookUsage } from "./analyze.js";
 import { findDefaultImportIdentifiers, findStyleHookCandidates } from "./discover.js";
-import { findSassClassDefinitions, scanSassUsage } from "./sass.js";
-import type { HookResult, ScanResult } from "./types.js";
+import { findCssClassDefinitions, findScssClassDefinitions } from "./cssLike.js";
+import { scanGlobalClassUsage } from "./globalClassUsage.js";
+import { findSassClassDefinitions } from "./sass.js";
+import type { GlobalClassDefinition, HookResult, ScanResult } from "./types.js";
 
 export interface ScanOptions {
   /** Paths to global Sass (indented syntax) files to also scan for unused classes. */
   sassFiles?: string[];
+  /** Paths to global SCSS (brace syntax) files to also scan for unused classes. */
+  scssFiles?: string[];
+  /** Paths to global plain CSS files to also scan for unused classes. */
+  cssFiles?: string[];
 }
 
 export function scan(project: Project, options: ScanOptions = {}): ScanResult {
@@ -48,11 +54,15 @@ export function scan(project: Project, options: ScanOptions = {}): ScanResult {
     });
   }
 
-  const sassResults = options.sassFiles?.length
-    ? options.sassFiles.flatMap((sassFile) =>
-        scanSassUsage(findSassClassDefinitions(sassFile), project.getSourceFiles()),
-      )
+  const globalClassDefinitions: GlobalClassDefinition[] = [
+    ...(options.sassFiles ?? []).flatMap((f) => findSassClassDefinitions(f)),
+    ...(options.scssFiles ?? []).flatMap((f) => findScssClassDefinitions(f)),
+    ...(options.cssFiles ?? []).flatMap((f) => findCssClassDefinitions(f)),
+  ];
+
+  const globalClassResults = globalClassDefinitions.length
+    ? scanGlobalClassUsage(globalClassDefinitions, project.getSourceFiles())
     : undefined;
 
-  return sassResults ? { results, sassResults } : { results };
+  return globalClassResults ? { results, globalClassResults } : { results };
 }

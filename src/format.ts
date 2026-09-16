@@ -34,14 +34,14 @@ export function toText(result: ScanResult, cwd = process.cwd()): string {
     }
   }
 
-  if (result.sassResults) {
-    const deadSass = result.sassResults.filter((c) => !c.used);
+  if (result.globalClassResults) {
+    const deadGlobal = result.globalClassResults.filter((c) => !c.used);
     lines.push("");
-    if (deadSass.length === 0) {
-      lines.push("No unused global Sass classes found.");
+    if (deadGlobal.length === 0) {
+      lines.push("No unused global stylesheet classes found.");
     } else {
-      lines.push(`Unused global Sass classes: ${deadSass.length}`);
-      for (const c of deadSass) {
+      lines.push(`Unused global stylesheet classes: ${deadGlobal.length}`);
+      for (const c of deadGlobal) {
         lines.push(`  - ${relOrAbs(c.filePath, cwd)}:${c.line} .${c.className}`);
       }
     }
@@ -95,15 +95,17 @@ export function toMarkdown(result: ScanResult, cwd = process.cwd()): string {
     lines.push("</details>");
   }
 
-  if (result.sassResults) {
-    const deadSass = result.sassResults.filter((c) => !c.used);
+  if (result.globalClassResults) {
+    const deadGlobal = result.globalClassResults.filter((c) => !c.used);
     lines.push("");
-    if (deadSass.length === 0) {
-      lines.push("✅ No unused global Sass classes found.");
+    if (deadGlobal.length === 0) {
+      lines.push("✅ No unused global stylesheet classes found.");
     } else {
-      lines.push(`Found **${deadSass.length}** unused global Sass class${deadSass.length === 1 ? "" : "es"}:`);
+      lines.push(
+        `Found **${deadGlobal.length}** unused global stylesheet class${deadGlobal.length === 1 ? "" : "es"}:`,
+      );
       lines.push("");
-      for (const c of deadSass) {
+      for (const c of deadGlobal) {
         lines.push(`- \`.${c.className}\` — ${relOrAbs(c.filePath, cwd)}:${c.line}`);
       }
     }

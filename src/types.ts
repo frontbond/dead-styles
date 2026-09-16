@@ -37,18 +37,22 @@ export interface HookResult {
   deadClasses: DefinedClass[];
 }
 
-export interface SassClassDefinition {
+/** Which global-stylesheet parser produced a definition. */
+export type GlobalClassSyntax = "sass" | "scss" | "css";
+
+export interface GlobalClassDefinition {
   className: string;
   filePath: string;
   line: number;
+  syntax: GlobalClassSyntax;
 }
 
-export interface SassClassResult extends SassClassDefinition {
+export interface GlobalClassResult extends GlobalClassDefinition {
   used: boolean;
 }
 
 export interface ScanResult {
   results: HookResult[];
-  /** Present only when one or more --sass files were scanned. */
-  sassResults?: SassClassResult[];
+  /** Present only when one or more --sass/--scss/--css files were scanned. */
+  globalClassResults?: GlobalClassResult[];
 }

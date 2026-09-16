@@ -107,3 +107,45 @@ describe("dead-styles scan (real monorepo fixture)", () => {
     expect(r.deadClasses.map((c) => c.name)).toEqual(["unusedAlias"]);
   });
 });
+
+describe("dead-styles scan with --sass + --scss + --css together", () => {
+  const fixtureRoot = path.dirname(fixtureTsconfig);
+
+  function runCombinedScan() {
+    const project = new Project({ tsConfigFilePath: fixtureTsconfig });
+    return scan(project, {
+      sassFiles: [path.join(fixtureRoot, "global.sass")],
+      scssFiles: [path.join(fixtureRoot, "global.scss")],
+      cssFiles: [path.join(fixtureRoot, "global.css")],
+    });
+  }
+
+  it("merges definitions from all three stylesheet syntaxes into one globalClassResults array, each tagged with its own syntax", () => {
+    const result = runCombinedScan();
+    if (!result.globalClassResults) throw new Error("Expected globalClassResults to be present");
+
+    const bySyntax = (syntax: "sass" | "scss" | "css") =>
+      result.globalClassResults!.filter((r) => r.syntax === syntax);
+
+    expect(bySyntax("sass").length).toBeGreaterThan(0);
+    expect(bySyntax("scss").length).toBeGreaterThan(0);
+    expect(bySyntax("css").length).toBeGreaterThan(0);
+  });
+
+  it("correctly flags used vs. dead classes independently across sass/scss/css", () => {
+    const result = runCombinedScan();
+    const byName = (name: string) => {
+      const found = result.globalClassResults!.find((r) => r.className === name);
+      if (!found) throw new Error(`No global class result for ${name}`);
+      return found;
+    };
+
+    expect(byName("usedDirect").used).toBe(true); // sass
+    expect(byName("scssUsedDirect").used).toBe(true); // scss
+    expect(byName("cssUsedDirect").used).toBe(true); // css
+
+    expect(byName("deadClass").used).toBe(false); // sass
+    expect(byName("scssDeadClass").used).toBe(false); // scss
+    expect(byName("cssDeadClass").used).toBe(false); // css
+  });
+});

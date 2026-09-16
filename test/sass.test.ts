@@ -4,7 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Project } from "ts-morph";
 import { describe, expect, it } from "vitest";
-import { findSassClassDefinitions, scanSassUsage } from "../src/sass.js";
+import { scanGlobalClassUsage } from "../src/globalClassUsage.js";
+import { findSassClassDefinitions } from "../src/sass.js";
 
 const fixtureDir = path.dirname(fileURLToPath(import.meta.url));
 const globalSassPath = path.join(fixtureDir, "fixtures/monorepo/global.sass");
@@ -42,13 +43,13 @@ describe("findSassClassDefinitions", () => {
   });
 });
 
-describe("scanSassUsage (real monorepo fixture)", () => {
+describe("scanGlobalClassUsage (real monorepo fixture, sass)", () => {
   it("finds classes used as a bare string, via clsx(), and as a clsx object key — and correctly flags the rest as dead", () => {
     const project = new Project({
       tsConfigFilePath: path.join(fixtureDir, "fixtures/monorepo/tsconfig.json"),
     });
     const definitions = findSassClassDefinitions(globalSassPath);
-    const results = scanSassUsage(definitions, project.getSourceFiles());
+    const results = scanGlobalClassUsage(definitions, project.getSourceFiles());
 
     const byName = (name: string) => {
       const found = results.find((r) => r.className === name);
@@ -74,7 +75,7 @@ describe("scanSassUsage (real monorepo fixture)", () => {
     project.createSourceFile("/consumer.tsx", `const el = <div className="textStyle1" />;`);
 
     const definitions = findSassClassDefinitions(sassFile);
-    const results = scanSassUsage(definitions, project.getSourceFiles());
+    const results = scanGlobalClassUsage(definitions, project.getSourceFiles());
 
     expect(results.find((r) => r.className === "textStyle1")?.used).toBe(true);
     expect(results.find((r) => r.className === "textStyle")?.used).toBe(false);

@@ -1,0 +1,30 @@
+/* color helpers */
+.cssUsedDirect {
+  color: red;
+}
+
+.cssUsedViaClsx,
+.cssUsedInObjectKey {
+  font-weight: bold;
+}
+
+.cssDeadClass {
+  color: blue;
+}
+
+.cssDeadClass2,
+.cssDeadClass3 {
+  color: green;
+}
+
+@media (max-width: 600px) {
+  .cssMediaIgnored {
+    display: none;
+  }
+}
+
+.cssOneLinerBgImage { background: url(http://example.com/img.png); }
+
+.cssAfterUrl {
+  color: purple;
+}
