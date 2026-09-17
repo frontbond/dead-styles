@@ -30,6 +30,7 @@ To keep the false-positive rate near zero, `dead-styles` skips (rather than repo
 - The styles object has a computed property key (`{ [dynamic]: {...} }`) — the class's real name isn't known statically.
 - A class is accessed via a computed/dynamic key (`classes[someVariable]`) instead of `classes.foo` — could be any class.
 - The whole `classes` object is forwarded somewhere we can't follow (spread with `{...classes}`, passed as a prop to a child component, assigned to another variable, returned from a function, etc.).
+- The hook **itself** (not its call result) is spread into a different `makeStyles()`/`tss.create()` call's styles object elsewhere — a real production pattern: `const styles = { ...stylesRow, ...stylesRowInner }; const useStyles = makeStyles()(styles);`. That merged, re-wrapped hook can make any of the spread hook's classes reachable through a call site that never actually calls the *original* hook at all, so once this is seen, nothing about that original hook is reported as dead.
 
 Skipped hooks are reported separately so you know what wasn't checked, but never show up as "dead."
 

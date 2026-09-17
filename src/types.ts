@@ -21,7 +21,8 @@ export type HookStatus =
   | "analyzed"
   | "no-call-sites"
   | "skipped-dynamic"
-  | "skipped-spread";
+  | "skipped-spread"
+  | "skipped-merged";
 
 export interface CallSite {
   filePath: string;

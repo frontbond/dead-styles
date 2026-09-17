@@ -21,6 +21,14 @@ export function analyzeHookUsage(hookRefRoots: Identifier[]): UsageAnalysis {
   const usedClassNames = new Set<string>();
   let sawDynamicAccess = false;
   let sawWholeObjectForwarding = false;
+  // The hook's own export gets spread into a DIFFERENT makeStyles()/
+  // tss.create() call's styles object elsewhere (`{ ...thisHook }`), rather
+  // than being called. That merged, re-wrapped hook can genuinely make any
+  // of this hook's classes reachable through a call site we have no way to
+  // follow (it's not calling *this* hook at all) — so once we see this, we
+  // can't trust a "dead" verdict for any class here, regardless of what the
+  // real call sites (if any) show.
+  let sawSpreadOfHookItself = false;
 
   // For a bare `export default`, every importing file's default-import
   // identifier resolves back to the SAME underlying export symbol — so
@@ -86,12 +94,23 @@ export function analyzeHookUsage(hookRefRoots: Identifier[]): UsageAnalysis {
         Node.isIdentifier(parent.getNameNode())
       ) {
         queue.push(parent.getNameNode() as Identifier);
+        continue;
+      }
+
+      // `{ ...thisHook }` — the hook itself (not its call result) is being
+      // spread into some other object literal, most likely a styles object
+      // for a brand-new makeStyles()/tss.create() call being assembled
+      // elsewhere.
+      if (Node.isSpreadAssignment(parent) && parent.getExpression() === ref) {
+        sawSpreadOfHookItself = true;
       }
     }
   }
 
   let status: HookStatus;
-  if (callSites.length === 0) {
+  if (sawSpreadOfHookItself) {
+    status = "skipped-merged";
+  } else if (callSites.length === 0) {
     status = "no-call-sites";
   } else if (sawWholeObjectForwarding) {
     status = "skipped-spread";

@@ -12,7 +12,7 @@ program
   .description(
     "Find CSS-in-JS classes (tss-react / MUI makeStyles / JSS) that are defined but never used anywhere in the project, and (with --sass/--scss/--css) global stylesheet classes that are never applied anywhere.",
   )
-  .version("0.1.6");
+  .version("0.1.7");
 
 const collectPath = (value: string, previous: string[] | undefined) => [
   ...(previous ?? []),

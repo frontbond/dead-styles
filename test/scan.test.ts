@@ -37,6 +37,8 @@ describe("dead-styles scan (real monorepo fixture)", () => {
         "useIconVariants",
         "default export of DefaultExport.styles",
         "default export of ReAlias.styles",
+        "useMergeSourceStyles",
+        "useMergeConsumerStyles",
       ].sort(),
     );
   });
@@ -105,6 +107,22 @@ describe("dead-styles scan (real monorepo fixture)", () => {
     expect(r.callSites.length).toBe(1);
     expect(r.usedClassNames.sort()).toEqual(["targetTitle"]);
     expect(r.deadClasses.map((c) => c.name)).toEqual(["unusedAlias"]);
+  });
+
+  it("does not flag a class as dead when the hook's OWN export (not its call result) is spread into a different makeStyles()/tss.create() call elsewhere — real production pattern (`const styles = { ...stylesRow, ...stylesRowInner }; const useStyles = makeStyles()(styles);`)", () => {
+    const r = byHookName(result.results, "useMergeSourceStyles");
+    expect(r.status).toBe("skipped-merged");
+    expect(r.deadClasses).toEqual([]);
+    // The direct call site (MergeSourceDirectUser.tsx) is still found and
+    // traced — the merge elsewhere is an ADDITIONAL reason to distrust any
+    // "dead" verdict, not a reason to lose the real call site.
+    expect(r.callSites.length).toBe(1);
+  });
+
+  it("the merged-into hook itself is separately (and correctly) skipped-dynamic, since its own definition has a top-level spread of unknown shape", () => {
+    const r = byHookName(result.results, "useMergeConsumerStyles");
+    expect(r.status).toBe("skipped-dynamic");
+    expect(r.deadClasses).toEqual([]);
   });
 });
 

@@ -8,7 +8,10 @@ export function toText(result: ScanResult, cwd = process.cwd()): string {
   const lines: string[] = [];
   const withDead = result.results.filter((r) => r.deadClasses.length > 0);
   const skipped = result.results.filter(
-    (r) => r.status === "skipped-dynamic" || r.status === "skipped-spread",
+    (r) =>
+      r.status === "skipped-dynamic" ||
+      r.status === "skipped-spread" ||
+      r.status === "skipped-merged",
   );
 
   if (withDead.length === 0) {
@@ -54,7 +57,10 @@ export function toMarkdown(result: ScanResult, cwd = process.cwd()): string {
   const lines: string[] = ["# dead-styles report", ""];
   const withDead = result.results.filter((r) => r.deadClasses.length > 0);
   const skipped = result.results.filter(
-    (r) => r.status === "skipped-dynamic" || r.status === "skipped-spread",
+    (r) =>
+      r.status === "skipped-dynamic" ||
+      r.status === "skipped-spread" ||
+      r.status === "skipped-merged",
   );
   const analyzedCount = result.results.filter((r) => r.status === "analyzed").length;
 
@@ -124,6 +130,9 @@ function describeSkipReason(r: HookResult): string {
   }
   if (r.status === "skipped-spread") {
     return "the `classes` object is forwarded whole (spread, passed as a prop, or assigned elsewhere) — can't verify which keys are actually used";
+  }
+  if (r.status === "skipped-merged") {
+    return "this hook itself (not its call result) is spread into a different makeStyles()/tss.create() call elsewhere (`{ ...thisHook }`) — can't verify which of its classes remain reachable through that merged, re-wrapped hook";
   }
   return "unknown";
 }
